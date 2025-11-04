@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle da Porta IoT</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+
+    <style>
+        body, html { height: 100%; }
+        body { display: flex; align-items: center; justify-content: center; background-color: #f8f9fa; }
+    </style>
+</head>
+<body class="p-3">
+
+    <div class="container" style="max-width: 500px;">
+        <div class="card shadow-sm">
+            <div class="card-body p-4 p-md-5">
+                <h2 class="card-title text-center mb-4">Controle da Trava IoT</h2>
+                
+                <div class="text-center mb-4">
+                    <span id="statusBadge" class="badge fs-6 p-2 bg-secondary">
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Verificando...
+                    </span>
+                </div>
+
+                <div class="d-grid gap-3">
+                    <button id="btnAbrir" class="btn btn-success btn-lg p-3">
+                        <span id="spinnerAbrir" class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                        <i id="iconAbrir" class="bi bi-unlock-fill me-2"></i> 
+                        ABRIR TRAVA
+                    </button>
+                    <button id="btnFechar" class="btn btn-danger btn-lg p-3">
+                        <span id="spinnerFechar" class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+                        <i id="iconFechar" class="bi bi-lock-fill me-2"></i> 
+                        FECHAR TRAVA
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configurações ---
+        const MQTT_BROKER_WS = "wss://broker.hivemq.com:8884/mqtt";
+        const COMANDO_TOPIC = "senai/iot/porta/comando"; // Para enviar
+        const STATUS_TOPIC = "senai/iot/porta/status";   // Para receber
+
+        // --- Elementos da Página ---
+        const btnAbrir = document.getElementById("btnAbrir");
+        const btnFechar = document.getElementById("btnFechar");
+        const statusBadge = document.getElementById("statusBadge");
+        
+        // Elementos dos spinners e ícones
+        const spinnerAbrir = document.getElementById("spinnerAbrir");
+        const iconAbrir = document.getElementById("iconAbrir");
+        const spinnerFechar = document.getElementById("spinnerFechar");
+        const iconFechar = document.getElementById("iconFechar");
+
+        // --- Conexão MQTT ---
+        const client = mqtt.connect(MQTT_BROKER_WS);
+
+        client.on("connect", () => {
+            console.log("Conectado ao MQTT (Web)");
+            // 3. NOVO: Se inscreve no tópico de STATUS
+            client.subscribe(STATUS_TOPIC);
+        });
+
+        // --- Lógica 1: Enviando Comandos ---
+        btnAbrir.addEventListener("click", () => {
+            enviarComando("abrir");
+        });
+
+        btnFechar.addEventListener("click", () => {
+            enviarComando("fechar");
+        });
+
+        function enviarComando(comando) {
+            const payload = JSON.stringify({ comando: comando });
+            console.log(`Enviando comando: ${comando}`);
+            client.publish(COMANDO_TOPIC, payload);
+
+            // 4. NOVO: Mostra feedback visual e desabilita botões
+            mostrarSpinner(comando);
+        }
+
+        // --- Lógica 2: Recebendo Status (A MÁGICA) ---
+        client.on("message", (topic, message) => {
+            if (topic === STATUS_TOPIC) {
+                try {
+                    const data = JSON.parse(message.toString());
+                    console.log("Status recebido:", data);
+                    atualizarStatus(data.status);
+                } catch(e) { console.error(e); }
+            }
+        });
+
+        // --- Funções Auxiliares de UI ---
+        
+        function atualizarStatus(status) {
+            if (status === "aberta") {
+                statusBadge.textContent = "Aberta";
+                statusBadge.className = "badge fs-6 p-2 bg-success"; // Muda cor para verde
+                pararSpinners();
+            } else if (status === "fechada") {
+                statusBadge.textContent = "Trancada";
+                statusBadge.className = "badge fs-6 p-2 bg-danger"; // Muda cor para vermelho
+                pararSpinners();
+            }
+        }
+        
+        function mostrarSpinner(comando) {
+            // Desabilita os dois botões para evitar cliques duplos
+            btnAbrir.disabled = true;
+            btnFechar.disabled = true;
+
+            if(comando === 'abrir') {
+                spinnerAbrir.classList.remove('d-none'); // Mostra spinner
+                iconAbrir.classList.add('d-none');      // Esconde ícone
+            } else {
+                spinnerFechar.classList.remove('d-none');
+                iconFechar.classList.add('d-none');
+            }
+        }
+        
+        function pararSpinners() {
+            // Reabilita botões
+            btnAbrir.disabled = false;
+            btnFechar.disabled = false;
+            
+            // Esconde spinners
+            spinnerAbrir.classList.add('d-none');
+            spinnerFechar.classList.add('d-none');
+            
+            // Mostra ícones
+            iconAbrir.classList.remove('d-none');
+            iconFechar.classList.remove('d-none');
+        }
+    </script>
+</body>
+</html>
