@@ -28,6 +28,13 @@
                     </span>
                 </div>
 
+                <div class="form-floating mb-3">
+                    <input type="password" class="form-control" id="inputSenha" placeholder="Senha">
+                    <label for="inputSenha">Senha de Acesso</label>
+                </div>
+                
+                <div id="alertArea" class="mb-3"></div>
+
                 <div class="d-grid gap-3">
                     <button id="btnAbrir" class="btn btn-success btn-lg p-3">
                         <span id="spinnerAbrir" class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
@@ -54,7 +61,9 @@
         const btnAbrir = document.getElementById("btnAbrir");
         const btnFechar = document.getElementById("btnFechar");
         const statusBadge = document.getElementById("statusBadge");
-        
+        const inputSenha = document.getElementById("inputSenha"); // Pega o input da senha
+        const alertArea = document.getElementById("alertArea"); // Pega a área de alerta
+
         // Elementos dos spinners e ícones
         const spinnerAbrir = document.getElementById("spinnerAbrir");
         const iconAbrir = document.getElementById("iconAbrir");
@@ -66,7 +75,6 @@
 
         client.on("connect", () => {
             console.log("Conectado ao MQTT (Web)");
-            // 3. NOVO: Se inscreve no tópico de STATUS
             client.subscribe(STATUS_TOPIC);
         });
 
@@ -80,47 +88,71 @@
         });
 
         function enviarComando(comando) {
-            const payload = JSON.stringify({ comando: comando });
+            limparAlerta(); // Limpa alertas antigos
+            const senhaDigitada = inputSenha.value;
+
+            // Validação simples no front-end
+            if (senhaDigitada.length === 0) {
+                mostrarAlerta("Por favor, digite a senha.", "warning");
+                return;
+            }
+
+            // NOVO: Payload agora inclui a senha
+            const payload = JSON.stringify({ 
+                comando: comando, 
+                senha: senhaDigitada 
+            });
+
             console.log(`Enviando comando: ${comando}`);
             client.publish(COMANDO_TOPIC, payload);
-
-            // 4. NOVO: Mostra feedback visual e desabilita botões
             mostrarSpinner(comando);
         }
 
-        // --- Lógica 2: Recebendo Status (A MÁGICA) ---
+        // --- Lógica 2: Recebendo Status ---
         client.on("message", (topic, message) => {
             if (topic === STATUS_TOPIC) {
                 try {
                     const data = JSON.parse(message.toString());
                     console.log("Status recebido:", data);
-                    atualizarStatus(data.status);
+                    atualizarStatusUI(data.status); // Chama a função que atualiza a tela
                 } catch(e) { console.error(e); }
             }
         });
 
         // --- Funções Auxiliares de UI ---
         
-        function atualizarStatus(status) {
+        function atualizarStatusUI(status) {
+            pararSpinners(); // Para os spinners independentemente do resultado
+            
             if (status === "aberta") {
                 statusBadge.textContent = "Aberta";
-                statusBadge.className = "badge fs-6 p-2 bg-success"; // Muda cor para verde
-                pararSpinners();
+                statusBadge.className = "badge fs-6 p-2 bg-success";
+                limparAlerta();
             } else if (status === "fechada") {
                 statusBadge.textContent = "Trancada";
-                statusBadge.className = "badge fs-6 p-2 bg-danger"; // Muda cor para vermelho
-                pararSpinners();
+                statusBadge.className = "badge fs-6 p-2 bg-danger";
+                limparAlerta();
+            } else if (status === "senha_invalida") {
+                // NOVO: Trata a resposta de senha inválida
+                mostrarAlerta("Senha inválida!", "danger");
+                inputSenha.focus(); // Coloca o cursor de volta no campo da senha
             }
+        }
+
+        function mostrarAlerta(mensagem, tipo = "danger") {
+            alertArea.innerHTML = `<div class="alert alert-${tipo}" role="alert">${mensagem}</div>`;
+        }
+        
+        function limparAlerta() {
+            alertArea.innerHTML = "";
         }
         
         function mostrarSpinner(comando) {
-            // Desabilita os dois botões para evitar cliques duplos
             btnAbrir.disabled = true;
             btnFechar.disabled = true;
-
             if(comando === 'abrir') {
-                spinnerAbrir.classList.remove('d-none'); // Mostra spinner
-                iconAbrir.classList.add('d-none');      // Esconde ícone
+                spinnerAbrir.classList.remove('d-none');
+                iconAbrir.classList.add('d-none');
             } else {
                 spinnerFechar.classList.remove('d-none');
                 iconFechar.classList.add('d-none');
@@ -128,15 +160,10 @@
         }
         
         function pararSpinners() {
-            // Reabilita botões
             btnAbrir.disabled = false;
             btnFechar.disabled = false;
-            
-            // Esconde spinners
             spinnerAbrir.classList.add('d-none');
             spinnerFechar.classList.add('d-none');
-            
-            // Mostra ícones
             iconAbrir.classList.remove('d-none');
             iconFechar.classList.remove('d-none');
         }
